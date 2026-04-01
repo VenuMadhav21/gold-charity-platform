@@ -104,6 +104,7 @@ function App() {
   const [charityForm, setCharityForm] = useState({ id: '', name: '', description: '' });
   const [charityMode, setCharityMode] = useState('edit');
   const [authView, setAuthView] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [authMode, setAuthMode] = useState(supabase ? 'loading' : 'signedOut');
 
   useEffect(() => {
@@ -323,6 +324,10 @@ function App() {
   }, [showAdminControls, activeSection]);
 
   useEffect(() => {
+    setMobileNavOpen(false);
+  }, [activeSection, authMode, isAuthenticated]);
+
+  useEffect(() => {
     if (!isAdmin || charityMode !== 'edit') return;
     const fallbackCharity = activeCharities[0];
     if (!charityForm.id && fallbackCharity) {
@@ -356,6 +361,11 @@ function App() {
     { id: 'draws', label: 'Draws' },
   ];
   if (showAdminControls) navItems.push({ id: 'admin', label: 'Admin' });
+
+  function handleSectionChange(sectionId) {
+    setActiveSection(sectionId);
+    setMobileNavOpen(false);
+  }
 
   const activeUser = currentUser ?? {
     email: '',
@@ -1240,7 +1250,15 @@ function App() {
   return (
     <div className="shell app-shell">
       <div className="workspace-shell">
-        <aside className="sidebar">
+        {mobileNavOpen ? (
+          <button
+            type="button"
+            className="sidebar-backdrop"
+            aria-label="Close navigation"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        ) : null}
+        <aside className={mobileNavOpen ? 'sidebar sidebar-open' : 'sidebar'}>
           <div className="sidebar-brand">
             <div className="brand-lockup brand-lockup--sidebar">
               <span className="brand-mark">GC</span>
@@ -1263,7 +1281,7 @@ function App() {
                 key={item.id}
                 type="button"
                 className={activeSection === item.id ? 'nav-item active' : 'nav-item'}
-                onClick={() => setActiveSection(item.id)}
+                onClick={() => handleSectionChange(item.id)}
               >
                 {item.label}
               </button>
@@ -1273,7 +1291,15 @@ function App() {
           <div className="sidebar-card sidebar-actions">
             <span className="label">Quick status</span>
             <strong>{activeUser.isSubscribed ? activeUser.plan : 'Free access'}</strong>
-            <button type="button" className="secondary" onClick={handleLogout} disabled={loading}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setMobileNavOpen(false);
+                handleLogout();
+              }}
+              disabled={loading}
+            >
               Log out
             </button>
           </div>
@@ -1301,6 +1327,17 @@ function App() {
               </p>
             </div>
             <div className="topbar-actions">
+              <button
+                type="button"
+                className="mobile-menu-button"
+                onClick={() => setMobileNavOpen((prev) => !prev)}
+                aria-label="Toggle navigation"
+                aria-expanded={mobileNavOpen}
+              >
+                <span />
+                <span />
+                <span />
+              </button>
               <span className={activeUser.isSubscribed ? 'pill good' : 'pill warning'}>
                 {activeUser.isSubscribed ? `Subscribed - ${activeUser.plan}` : 'Not subscribed'}
               </span>
