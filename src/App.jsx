@@ -156,7 +156,6 @@ function App() {
   }
 
   const currentUser = state.users.find((user) => user.id === state.currentUserId) ?? null;
-  const isAdmin = Boolean(currentUser?.role === 'admin');
   const activeCharities = state.charities?.length ? state.charities : DEFAULT_CHARITIES;
   const currentUserScores = useMemo(
     () =>
@@ -177,7 +176,9 @@ function App() {
   const currentCharity =
     activeCharities.find((charity) => charity.id === currentUser?.charityId) ??
     activeCharities[0];
+  const isAdmin = Boolean(currentUser?.role === 'admin');
   const showAdminControls = isAdmin;
+  const isAuthenticated = Boolean(currentUser);
 
   useEffect(() => {
     if (!showAdminControls && activeSection === 'admin') {
@@ -194,16 +195,25 @@ function App() {
   ];
   if (showAdminControls) navItems.push({ id: 'admin', label: 'Admin' });
 
+  const activeUser = currentUser ?? {
+    email: '',
+    isSubscribed: false,
+    plan: 'free',
+    role: 'user',
+    charityId: activeCharities[0]?.id ?? DEFAULT_CHARITIES[0].id,
+    contributionPercentage: 10,
+  };
+
   const overviewCards = [
     {
       label: 'Subscription',
-      value: currentUser.isSubscribed ? currentUser.plan : 'Free',
-      helper: currentUser.isSubscribed ? 'Membership active' : 'No active plan',
+      value: activeUser.isSubscribed ? activeUser.plan : 'Free',
+      helper: activeUser.isSubscribed ? 'Membership active' : 'No active plan',
     },
     {
       label: 'Charity',
       value: currentCharity?.name ?? 'None selected',
-      helper: `${currentUser.contributionPercentage}% contribution`,
+      helper: `${activeUser.contributionPercentage}% contribution`,
     },
     {
       label: 'Scores',
@@ -336,6 +346,7 @@ function App() {
       }
       setState((prev) => ({ ...prev, currentUserId: null }));
       setStatus('Logged out.');
+      setActiveSection('overview');
     } finally {
       setLoading(false);
     }
@@ -438,7 +449,7 @@ function App() {
   }
 
   function handleTriggerDraw() {
-    if (!isAdmin) return;
+    if (!currentUser || !isAdmin) return;
 
     if (supabase) {
       triggerRemoteDraw()
@@ -490,7 +501,7 @@ function App() {
     setStatus(`Draw generated: ${numbers.join(' - ')}.`);
   }
 
-  if (!currentUser) {
+  if (!isAuthenticated) {
     return (
       <div className="shell auth-shell">
         <section className="hero-card">
@@ -589,7 +600,7 @@ function App() {
 
           <div className="sidebar-card sidebar-actions">
             <span className="label">Quick status</span>
-            <strong>{currentUser.isSubscribed ? currentUser.plan : 'Free access'}</strong>
+            <strong>{activeUser.isSubscribed ? activeUser.plan : 'Free access'}</strong>
             <button className="secondary" onClick={handleLogout} disabled={loading}>
               Log out
             </button>
@@ -611,8 +622,8 @@ function App() {
               </p>
             </div>
             <div className="topbar-actions">
-              <span className={currentUser.isSubscribed ? 'pill good' : 'pill warning'}>
-                {currentUser.isSubscribed ? `Subscribed - ${currentUser.plan}` : 'Not subscribed'}
+              <span className={activeUser.isSubscribed ? 'pill good' : 'pill warning'}>
+                {activeUser.isSubscribed ? `Subscribed - ${activeUser.plan}` : 'Not subscribed'}
               </span>
               <span className="pill">{currentUserScores.length}/5 scores</span>
             </div>
@@ -635,7 +646,7 @@ function App() {
               <section className="panel panel-accent">
                 <div className="panel-header">
                   <h2>Membership Overview</h2>
-                  <span className="pill">{currentUser.isSubscribed ? 'Active' : 'Pending'}</span>
+                  <span className="pill">{activeUser.isSubscribed ? 'Active' : 'Pending'}</span>
                 </div>
                 <p>
                   Subscription status is stored in the database and controls access to member features.
@@ -679,8 +690,8 @@ function App() {
             <section className="panel">
               <div className="panel-header">
                 <h2>Subscription</h2>
-                <span className={currentUser.isSubscribed ? 'pill good' : 'pill warning'}>
-                  {currentUser.isSubscribed ? `Subscribed - ${currentUser.plan}` : 'Not subscribed'}
+                <span className={activeUser.isSubscribed ? 'pill good' : 'pill warning'}>
+                  {activeUser.isSubscribed ? `Subscribed - ${activeUser.plan}` : 'Not subscribed'}
                 </span>
               </div>
               <p>Subscription status is stored in the database and controls access to member features.</p>
