@@ -70,6 +70,26 @@ function clampContributionPercentage(value) {
   return Math.max(10, Math.min(50, value));
 }
 
+function getRouteFromPath(pathname) {
+  const path = pathname.replace(/\/+$/, '') || '/';
+
+  if (path === '/login') return { page: 'login', section: 'overview' };
+  if (path === '/signup') return { page: 'signup', section: 'overview' };
+  if (path === '/admin') return { page: 'admin', section: 'admin' };
+  if (path.startsWith('/dashboard/')) {
+    const section = path.split('/')[2] || 'overview';
+    return { page: 'dashboard', section };
+  }
+  if (path === '/dashboard') return { page: 'dashboard', section: 'overview' };
+  return { page: 'landing', section: 'overview' };
+}
+
+function getPathForSection(sectionId) {
+  if (sectionId === 'admin') return '/admin';
+  if (sectionId === 'overview') return '/dashboard';
+  return `/dashboard/${sectionId}`;
+}
+
 function getSupabaseAuthMessage(error) {
   const message = error?.message || '';
   if (/email.*confirm/i.test(message)) {
@@ -105,11 +125,26 @@ function App() {
   const [charityMode, setCharityMode] = useState('edit');
   const [authView, setAuthView] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
   const [authMode, setAuthMode] = useState(supabase ? 'loading' : 'signedOut');
 
   useEffect(() => {
     saveState(state);
   }, [state]);
+
+  useEffect(() => {
+    const handlePopState = () => setRoute(getRouteFromPath(window.location.pathname));
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (route.page === 'login' || route.page === 'signup') {
+      setAuthView(route.page);
+    } else {
+      setAuthView(null);
+    }
+  }, [route.page]);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -317,6 +352,12 @@ function App() {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 
+  function navigateTo(path) {
+    const nextRoute = getRouteFromPath(path);
+    window.history.pushState({}, '', path);
+    setRoute(nextRoute);
+  }
+
   useEffect(() => {
     if (!showAdminControls && activeSection === 'admin') {
       setActiveSection('overview');
@@ -353,6 +394,37 @@ function App() {
     }
   }, [activeCharities, charityForm.id, charityMode, isAdmin, selectedAdminCharity]);
 
+  useEffect(() => {
+    if (route.page === 'admin') {
+      setActiveSection('admin');
+      return;
+    }
+
+    if (route.page === 'dashboard') {
+      setActiveSection(route.section || 'overview');
+    }
+  }, [route.page, route.section]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (route.page === 'landing' || route.page === 'login' || route.page === 'signup') {
+      navigateTo(currentUser?.role === 'admin' ? '/admin' : '/dashboard');
+    }
+  }, [currentUser?.role, isAuthenticated, route.page]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      if (route.page === 'dashboard' || route.page === 'admin') {
+        navigateTo('/login');
+      }
+      return;
+    }
+
+    if (route.page === 'admin' && !isAdmin) {
+      navigateTo('/dashboard');
+    }
+  }, [isAdmin, isAuthenticated, route.page]);
+
   const navItems = [
     { id: 'overview', label: 'Overview' },
     { id: 'subscription', label: 'Subscription' },
@@ -363,7 +435,7 @@ function App() {
   if (showAdminControls) navItems.push({ id: 'admin', label: 'Admin' });
 
   function handleSectionChange(sectionId) {
-    setActiveSection(sectionId);
+    navigateTo(getPathForSection(sectionId));
     setMobileNavOpen(false);
   }
 
@@ -497,7 +569,7 @@ function App() {
   }
 
   function openAuthView(mode) {
-    setAuthView(mode);
+    navigateTo(`/${mode}`);
     setStatus('');
   }
 
@@ -592,6 +664,7 @@ function App() {
       setAuthForm({ email: '', password: '' });
       setScoreForm('');
       setActiveSection('overview');
+      navigateTo('/');
       setStatus('Logged out.');
       if (supabase) {
         supabase.auth.signOut().catch(() => {});
@@ -893,9 +966,15 @@ function App() {
   async function handleAdminUpdateUser(userId, patch) {
     if (!isAdmin) return;
 
+    const targetUser = state.users.find((entry) => entry.id === userId);
+    if (!targetUser) {
+      setStatus('User not found.');
+      return;
+    }
+
     if (supabase) {
       try {
-        await syncCurrentProfile(userId, { ...patch, email: user.email });
+        await syncCurrentProfile(userId, { ...patch, email: targetUser.email });
       } catch (error) {
         setStatus(error.message || 'Unable to update user.');
         return;
@@ -1029,7 +1108,7 @@ function App() {
               </div>
             </div>
             <div className="auth-actions">
-              <button type="button" className="secondary" onClick={() => setAuthView(null)}>
+              <button type="button" className="secondary" onClick={() => navigateTo('/')}>
                 Back to home
               </button>
             </div>
@@ -1092,20 +1171,20 @@ function App() {
                 </div>
               </div>
               <div className="auth-actions">
-                <button type="button" className="secondary" onClick={() => setAuthView(null)}>
+                <button type="button" className="secondary" onClick={() => navigateTo('/')}>
                   Back to home
                 </button>
                 <button
                   type="button"
                   className={authView === 'login' ? 'primary' : 'secondary'}
-                  onClick={() => setAuthView('login')}
+                  onClick={() => navigateTo('/login')}
                 >
                   Log in
                 </button>
                 <button
                   type="button"
                   className={authView === 'signup' ? 'primary' : 'secondary'}
-                  onClick={() => setAuthView('signup')}
+                  onClick={() => navigateTo('/signup')}
                 >
                   Sign up
                 </button>
@@ -1180,7 +1259,7 @@ function App() {
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => setAuthView(null)}
+                      onClick={() => navigateTo('/')}
                       disabled={loading}
                     >
                       Back
