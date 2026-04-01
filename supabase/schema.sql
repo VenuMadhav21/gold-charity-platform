@@ -16,7 +16,7 @@ create table if not exists public.profiles (
   is_subscribed boolean not null default false,
   plan text not null default 'free',
   charity_id text references public.charities(id),
-  contribution_percentage integer not null default 10,
+  contribution_percentage integer not null default 10 check (contribution_percentage between 10 and 50),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -33,8 +33,27 @@ create table if not exists public.scores (
 create table if not exists public.draws (
   id uuid primary key default gen_random_uuid(),
   numbers integer[] not null,
+  prize_pool integer not null default 1000,
+  rollover_pool integer not null default 0,
+  jackpot_pool integer not null default 0,
+  runner_up_pool integer not null default 0,
+  third_place_pool integer not null default 0,
+  jackpot_rollover integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table public.draws
+  add column if not exists prize_pool integer not null default 1000;
+alter table public.draws
+  add column if not exists rollover_pool integer not null default 0;
+alter table public.draws
+  add column if not exists jackpot_pool integer not null default 0;
+alter table public.draws
+  add column if not exists runner_up_pool integer not null default 0;
+alter table public.draws
+  add column if not exists third_place_pool integer not null default 0;
+alter table public.draws
+  add column if not exists jackpot_rollover integer not null default 0;
 
 -- Results
 create table if not exists public.results (
@@ -44,8 +63,30 @@ create table if not exists public.results (
   draw_date timestamptz not null,
   matches integer not null default 0,
   winnings integer not null default 0,
+  prize_tier text,
+  verification_status text not null default 'pending',
+  proof_url text not null default '',
+  proof_note text not null default '',
+  payment_status text not null default 'pending',
+  verified_at timestamptz,
+  reviewed_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
+
+alter table public.results
+  add column if not exists prize_tier text;
+alter table public.results
+  add column if not exists verification_status text not null default 'pending';
+alter table public.results
+  add column if not exists proof_url text not null default '';
+alter table public.results
+  add column if not exists proof_note text not null default '';
+alter table public.results
+  add column if not exists payment_status text not null default 'pending';
+alter table public.results
+  add column if not exists verified_at timestamptz;
+alter table public.results
+  add column if not exists reviewed_by uuid references auth.users(id);
 
 -- updated_at trigger
 create or replace function public.set_updated_at()
@@ -121,6 +162,14 @@ for select
 to authenticated, anon
 using (true);
 
+drop policy if exists "manage charities admin only" on public.charities;
+create policy "manage charities admin only"
+on public.charities
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
 -- Profiles policies
 drop policy if exists "read own profile or admin" on public.profiles;
 create policy "read own profile or admin"
@@ -195,6 +244,14 @@ on public.results
 for insert
 to authenticated
 with check (public.is_admin());
+
+drop policy if exists "update own results or admin" on public.results;
+create policy "update own results or admin"
+on public.results
+for update
+to authenticated
+using (user_id = auth.uid() or public.is_admin())
+with check (user_id = auth.uid() or public.is_admin());
 
 -- Seed charities
 insert into public.charities (id, name, description)
